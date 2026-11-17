@@ -1,0 +1,67 @@
+{% extends 'base.html' %}{% block title %}Dashboard{% endblock %}{% block content %}
+<div class="heading"><div><div class="eyebrow">BUSINESS INTELLIGENCE / OVERVIEW</div><h1>Revenue intelligence <span class="subtle">at a glance.</span></h1><p class="lead">Import data, understand performance, and turn numbers into decisions.</p></div><a class="btn" href="{% url 'upload' %}">+ Upload dataset</a></div>
+{% if selected %}
+<div class="controls card"><div><span class="tiny">CURRENT DATASET</span><form action="{% url 'dashboard' %}" method="get"><select name="dataset" onchange="this.form.submit()">{% for ds in datasets %}<option value="{{ ds.pk }}" {% if ds.pk == selected.pk %}selected{% endif %}>{{ ds.name }} ({{ ds.record_count }} rows)</option>{% endfor %}</select><noscript><button type="submit">Select</button></noscript></form></div><div class="actions"><a class="btn outline" href="{% url 'export_report' selected.pk %}">↓ Export report</a><form method="post" action="{% url 'delete_dataset' selected.pk %}" onsubmit="return confirm('Delete this dataset permanently?')">{% csrf_token %}<button class="btn danger" type="submit">Delete</button></form></div></div>
+<div class="stats"><div class="stat card"><span>Total revenue</span><strong>€{{ metrics.kpis.revenue|floatformat:2 }}</strong><small>Calculated from quantity × price</small></div><div class="stat card"><span>Order records</span><strong>{{ metrics.kpis.orders }}</strong><small>Uploaded sales rows</small></div><div class="stat card"><span>Units sold</span><strong>{{ metrics.kpis.quantity }}</strong><small>Sum of quantities</small></div><div class="stat card"><span>Avg. revenue / row</span><strong>€{{ metrics.kpis.avg_order_value|floatformat:2 }}</strong><small>Revenue divided by rows</small></div></div>
+<section class="card insight-panel"><div class="cardhead"><div><div class="eyebrow">AUTOMATED INSIGHTS</div><h2>Key observations</h2></div><span class="tag">COMPUTED · NO AI KEY</span></div><div class="insights-grid">{% for item in auto_insights %}<div class="insight-item"><span class="insight-dot">✦</span><p>{{ item }}</p></div>{% endfor %}</div><p class="note">Insights describe the uploaded dataset, not verified external business facts.</p></section>
+<div class="two-col chart-grid"><section class="card"><div class="cardhead"><h2>Monthly revenue trend</h2><span class="tag">TIMELINE</span></div><div id="monthlyChart" class="chart" role="img" aria-label="Line chart of monthly revenue"></div></section><section class="card"><div class="cardhead"><h2>Revenue by market</h2><span class="tag">TOP MARKETS</span></div><div id="countryChart" class="chart" role="img" aria-label="Bar chart of revenue by country"></div></section></div>
+<div class="two-col"><section class="card"><div class="cardhead"><h2>Revenue by country</h2><span class="tag">TOP 10</span></div><div class="bars">{% for row in metrics.by_country %}<div class="barrow"><span>{{ row.name }}</span><div class="track"><div class="fill" style="width:{% widthratio row.revenue metrics.kpis.revenue 100 %}%"></div></div><b>€{{ row.revenue|floatformat:2 }}</b></div>{% empty %}<p>No data</p>{% endfor %}</div></section><section class="card"><div class="cardhead"><h2>Top products</h2><span class="tag">TOP 10</span></div><table><thead><tr><th>Product</th><th>Revenue</th></tr></thead><tbody>{% for row in metrics.by_product %}<tr><td>{{ row.name }}</td><td>€{{ row.revenue|floatformat:2 }}</td></tr>{% endfor %}</tbody></table></section></div>
+<div class="two-col"><section class="card"><div class="cardhead"><h2>Top customers</h2><span class="tag">TOP 10</span></div><table><thead><tr><th>Customer</th><th>Revenue</th></tr></thead><tbody>{% for row in metrics.by_customer %}<tr><td>{{ row.name }}</td><td>€{{ row.revenue|floatformat:2 }}</td></tr>{% endfor %}</tbody></table></section><section class="card"><div class="cardhead"><h2>Revenue by year</h2><span class="tag">HISTORICAL</span></div><table><thead><tr><th>Year</th><th>Revenue</th></tr></thead><tbody>{% for row in metrics.by_year %}<tr><td>{{ row.year }}</td><td>€{{ row.revenue|floatformat:2 }}</td></tr>{% endfor %}</tbody></table><p class="note">Comparisons may be affected by partial-year coverage.</p></section></div>
+<section class="card askcard"><div class="cardhead"><div><div class="eyebrow">INTELLIGENCE ASSISTANT</div><h2>Ask your business data</h2><p class="muted">Grounded analytics with customer, product, country and year filters. Optional generative AI explanations.</p></div><span class="tag">DATA-GROUNDED</span></div><div class="chips"><button type="button" data-question="What is the total revenue?">Revenue summary</button><button type="button" data-question="Which customers generate the most revenue?">Top customers</button><button type="button" data-question="Show revenue by country">By country</button><button type="button" data-question="Show the revenue trend by year">Yearly trend</button></div><div class="askform"><input id="question" maxlength="500" placeholder="Ask: Which products generate the most revenue?" aria-label="Question"><button type="button" class="btn" id="askBtn">Ask</button><button type="button" class="btn outline" id="aiAskBtn">✨ Ask AI (optional)</button><button type="button" class="btn outline" id="aiBtn">AI overview</button></div><div class="prompt-help">Try: “Revenue for Germany in 2025”, “Sales of Filter Set”, or “Monthly sales in 2026”.</div><div id="answer" class="answer" aria-live="polite">Your answer will appear here.</div></section>
+{{ metrics|json_script:"metricsPayload" }}
+<script>
+(function(){
+ const pk = {{ selected.pk }};
+ const answer = document.getElementById('answer');
+ const question = document.getElementById('question');
+ const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+ async function post(endpoint, body) {
+  answer.textContent = 'Processing…';
+  try {
+   const response = await fetch(`/api/datasets/${pk}/${endpoint}/`, {method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify(body)});
+   const data = await response.json();
+   answer.textContent = data.answer || data.summary || data.error || 'No response';
+  } catch(e) {answer.textContent='Request failed. Check your connection.';}
+ }
+ document.getElementById('askBtn').onclick = ()=>post('ask',{question:question.value});
+ document.getElementById('aiBtn').onclick = ()=>post('ai-summary',{});
+ document.getElementById('aiAskBtn').onclick = ()=>post('ai-ask',{question:question.value});
+ question.addEventListener('keydown', e=>{if(e.key==='Enter')post('ask',{question:question.value});});
+ document.querySelectorAll('[data-question]').forEach(button=>button.onclick=()=>{question.value=button.dataset.question; post('ask',{question:question.value});});
+ const metrics = JSON.parse(document.getElementById('metricsPayload').textContent);
+ // Small dependency-free SVG chart renderer. No third-party CDN is required.
+ const NS='http://www.w3.org/2000/svg';
+ function node(tag,attrs={},label='') {const el=document.createElementNS(NS,tag); for(const [k,v] of Object.entries(attrs)) el.setAttribute(k,v); if(label)el.textContent=label;return el;}
+ function draw(el,entries,type){
+  if(!el||!entries.length){if(el)el.textContent='No data available';return;}
+  const width=720,height=280,left=64,right=28,top=24,bottom=55;
+  const svg=node('svg',{viewBox:`0 0 ${width} ${height}`,role:'presentation'});
+  const max=Math.max(...entries.map(x=>x.revenue),1)*1.15;
+  const money=v=>'€'+Number(v).toLocaleString('en-IE',{maximumFractionDigits:0});
+  for(let j=0;j<=4;j++){
+   const y=top+(height-top-bottom)*j/4;
+   svg.append(node('line',{x1:left,x2:width-right,y1:y,y2:y,stroke:'#e7edf7','stroke-width':'1'}));
+   svg.append(node('text',{x:left-8,y:y+4,'text-anchor':'end',fill:'#8896ad','font-size':'11'},money(max*(1-j/4))));
+  }
+  const usable=width-left-right,ploth=height-top-bottom;
+  if(type==='line'){
+   const pts=entries.map((x,i)=>[left+(entries.length===1?.5:i/(entries.length-1))*usable,top+ploth*(1-x.revenue/max)]);
+   svg.append(node('polyline',{points:pts.map(p=>p.join(',')).join(' '),fill:'none',stroke:'#3967de','stroke-width':'3','stroke-linecap':'round','stroke-linejoin':'round'}));
+   pts.forEach(([x,y],i)=>{const c=node('circle',{cx:x,cy:y,r:'4',fill:'#3967de'});c.append(node('title',{},`${entries[i].label}: ${money(entries[i].revenue)}`));svg.append(c);});
+  }else{
+   // vertical bars make country names readable with a rotated x axis
+   const step=usable/entries.length;
+   entries.forEach((r,i)=>{const bh=ploth*r.revenue/max;const bar=node('rect',{x:left+i*step+step*.15,y:top+ploth-bh,width:step*.7,height:bh,rx:'4',fill:'#5477e3'});bar.append(node('title',{},`${r.label}: ${money(r.revenue)}`));svg.append(bar);});
+  }
+  const limit=entries.length<=8?1:Math.ceil(entries.length/8);
+  entries.forEach((r,i)=>{if(i%limit!==0)return;const x=left+(type==='line'?(entries.length===1?.5:i/(entries.length-1))*usable:(i+.5)*usable/entries.length);svg.append(node('text',{x,y:height-22,'text-anchor':'end',transform:`rotate(-35 ${x} ${height-22})`,fill:'#718199','font-size':'11'},r.label));});
+  el.replaceChildren(svg);
+ }
+ draw(document.getElementById('monthlyChart'),metrics.by_month.map(x=>({label:x.month,revenue:x.revenue})),'line');
+ draw(document.getElementById('countryChart'),metrics.by_country.slice(0,8).map(x=>({label:x.name,revenue:x.revenue})),'bar');
+})();
+</script>
+{% else %}
+<div class="empty card"><div class="emptyicon">↗</div><h2>Your insights start with a dataset.</h2><p>Upload your first CSV or try the included synthetic sales example to see the complete dashboard.</p><a class="btn" href="{% url 'upload' %}">Upload your first dataset</a><a class="secondary-link" href="/static/sample_sales.csv" download>Download example CSV</a></div>
+{% endif %}
+{% endblock %}

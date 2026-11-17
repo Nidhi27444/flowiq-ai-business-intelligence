@@ -1,0 +1,5 @@
+{% extends 'base.html' %}{% block title %}Upload dataset{% endblock %}{% block content %}
+<div class="eyebrow">DATA INGESTION</div><h1>Upload your business data</h1><p class="lead">Import a CSV file. We validate each row before saving it to your dataset.</p>
+<div class="card uploadcard"><form method="post" enctype="multipart/form-data">{% csrf_token %}{{ form.as_p }}<button class="btn" type="submit">Import dataset</button></form>
+<div class="hint"><b>Required columns</b><code>order_date,customer,product,country,quantity,unit_price</code><p>Date format: YYYY-MM-DD. Price uses a dot as decimal separator. Download <a href="/static/sample_sales.csv" download>sample CSV</a> to try it.</p></div></div>
+{% endblock %}
